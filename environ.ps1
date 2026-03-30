@@ -11,26 +11,60 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 # Function to install packages via winget only if not already installed
 function Install-Package {
     param (
-        [string]$PackageId
+        [string]$PackageId,
+        [string]$DisplayName
     )
     $installed = winget list --id $PackageId | Select-String $PackageId
     if ($installed) {
-        Write-Host "$PackageId already installed. Skipping..."
+        Write-Host "$DisplayName already installed. Skipping..."
     } else {
-        Write-Host "Installing $PackageId..."
+        Write-Host "Installing $DisplayName..."
         winget install --id $PackageId --silent --accept-package-agreements --accept-source-agreements -e
     }
 }
 
-# Install core development tools
-Install-Package "Microsoft.VisualStudioCode.Insiders"
-Install-Package "Python.Python.3"
-Install-Package "OpenJS.NodeJS.LTS"
-Install-Package "Git.Git"
-Install-Package "GitHub.GitHubDesktop"
-Install-Package "Cloudflare.cloudflared"
-Install-Package "Google.Chrome"
+# Define available packages
+$packages = @(
+    @{ Id = "Microsoft.VisualStudioCode.Insiders"; Name = "Visual Studio Code (Insiders)" },
+    @{ Id = "Python.Python.3"; Name = "Python 3" },
+    @{ Id = "OpenJS.NodeJS.LTS"; Name = "Node.js LTS" },
+    @{ Id = "Git.Git"; Name = "Git" },
+    @{ Id = "GitHub.GitHubDesktop"; Name = "GitHub Desktop" },
+    @{ Id = "Cloudflare.cloudflared"; Name = "Cloudflared" },
+    @{ Id = "Google.Chrome"; Name = "Google Chrome" },
+    @{ Id = "Mozilla.Firefox"; Name = "Mozilla Firefox" },
+    @{ Id = "Adobe.Acrobat.Reader.64-bit"; Name = "Adobe Acrobat Reader" },
+    @{ Id = "AnyDeskSoftwareGmbH.AnyDesk"; Name = "AnyDesk" }
+)
 
+# Show menu
+Write-Host "Select the packages you want to install (comma-separated numbers):"
+for ($i = 0; $i -lt $packages.Count; $i++) {
+    Write-Host "$($i+1). $($packages[$i].Name)"
+}
+Write-Host "A. Install ALL packages"
+
+# Read user input
+$userChoice = Read-Host "Enter your choices (e.g. 1,3,5 or A for all)"
+
+if ($userChoice -eq "A" -or $userChoice -eq "a") {
+    Write-Host "Installing all packages..."
+    foreach ($pkg in $packages) {
+        Install-Package -PackageId $pkg.Id -DisplayName $pkg.Name
+    }
+} else {
+    $choices = $userChoice -split "," | ForEach-Object { $_.Trim() }
+    foreach ($choice in $choices) {
+        if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $packages.Count) {
+            $pkg = $packages[[int]$choice - 1]
+            Install-Package -PackageId $pkg.Id -DisplayName $pkg.Name
+        } else {
+            Write-Warning "Invalid choice: $choice"
+        }
+    }
+}
+
+# --- Environment setup continues as before ---
 # Create standard project directory
 $projectPath = "$env:USERPROFILE\Projects"
 if (-not (Test-Path $projectPath)) {
