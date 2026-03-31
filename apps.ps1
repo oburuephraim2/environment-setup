@@ -1,4 +1,11 @@
 # Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# Ensure winget is installed
+if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Warning "Winget is not installed. Please install 'App Installer' from the Microsoft Store."
+    exit
+}
+
 # Ensure script runs as Administrator
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Warning "Please run this script as Administrator."
@@ -14,22 +21,53 @@ function Install-Package {
         [string]$PackageId,
         [string]$DisplayName
     )
-    $installed = winget list --id $PackageId | Select-String $PackageId
-    if ($installed) {
-        Write-Host "$DisplayName already installed. Skipping..."
+
+    Write-Host "`n>>> Checking $DisplayName ($PackageId)..." -ForegroundColor Cyan
+
+    # Check if already installed - Using --source winget to ensure a clean lookup
+    $check = winget list --id "$PackageId" --exact --source winget 2>$null
+    
+    if ($check -match $PackageId) {
+        Write-Host "$DisplayName is already installed. Skipping..." -ForegroundColor Yellow
     } else {
-        Write-Host "Installing $DisplayName..."
-        winget install --id $PackageId --silent --accept-package-agreements --accept-source-agreements -e
+        Write-Host "Installing $DisplayName (Waiting for completion - no timeout)..."
+        try {
+            # Added --source winget here to fix "No package found" errors
+            $args = @(
+                "install", 
+                "--id", $PackageId, 
+                "--silent", 
+                "--disable-interactivity", 
+                "--force", 
+                "--accept-package-agreements", 
+                "--accept-source-agreements", 
+                "--source", "winget",
+                "-e"
+            )
+            
+            $process = Start-Process -FilePath "winget" -ArgumentList $args -NoNewWindow -PassThru
+            
+            # Wait Indefinitely: This fixes the 5-minute timeout issue for large apps like Adobe
+            $process.WaitForExit()
+            
+            if ($process.ExitCode -eq 0) {
+                Write-Host "SUCCESS: $DisplayName installed." -ForegroundColor Green
+            } else {
+                Write-Warning "FAILED: $DisplayName returned exit code $($process.ExitCode)."
+            }
+        }
+        catch {
+            Write-Warning "ERROR: Failed to launch winget for $DisplayName. Details: $_"
+        }
     }
 }
 
-# Define available packages
+# Define available packages with corrected IDs
 $packages = @(
     @{ Id = "Google.Chrome"; Name = "Google Chrome" },
-    @{ Id = "Mozilla.Firefox"; Name = "Mozilla Firefox" },
-    @{ Id = "Adobe.Acrobat.Reader.64-bit"; Name = "Adobe Acrobat Reader" },
-    @{ Id = "AnyDeskSoftwareGmbH.AnyDesk"; Name = "AnyDesk" },
-    @{ Id = "Microsoft.VisualStudioCode.Insiders"; Name = "Visual Studio Code (Insiders)" },
+    @{ Id = "Adobe.Acrobat.Reader.64-bit"; Name = "Adobe Acrobat Reader (64-bit)" },
+    @{ Id = "AnyDesk.AnyDesk"; Name = "AnyDesk" }, # Corrected ID (previously AnyDeskSoftwareGmbH.AnyDesk)
+    @{ Id = "Microsoft.VisualStudioCode"; Name = "Visual Studio Code" },
     @{ Id = "Python.Python.3"; Name = "Python 3" },
     @{ Id = "OpenJS.NodeJS.LTS"; Name = "Node.js LTS" },
     @{ Id = "Git.Git"; Name = "Git" },
@@ -38,18 +76,19 @@ $packages = @(
 )
 
 # Show menu
-Write-Host "Select the packages you want to install (comma-separated numbers):"
+Write-Host "`n--- Software Installation Menu ---" -ForegroundColor Blue
 for ($i = 0; $i -lt $packages.Count; $i++) {
     Write-Host "$($i+1). $($packages[$i].Name)"
 }
 Write-Host "A. Install ALL packages"
+Write-Host "----------------------------------`n"
 
 function Get-PackageSelection {
     while ($true) {
         $userChoice = Read-Host "Enter your choices (e.g. 1,3,5 or A for all)"
 
         if ([string]::IsNullOrWhiteSpace($userChoice)) {
-            Write-Warning "No selection entered. Please choose one or more package numbers, or 'A' to install all."
+            Write-Warning "No selection entered."
             continue
         }
 
@@ -71,7 +110,7 @@ function Get-PackageSelection {
         }
 
         if ($invalid.Count -gt 0) {
-            Write-Warning "Invalid choice(s): $($invalid -join ', '). Please enter only numbers between 1 and $($packages.Count), or 'A'."
+            Write-Warning "Invalid choice(s): $($invalid -join ', ')."
             continue
         }
 
@@ -79,7 +118,7 @@ function Get-PackageSelection {
             return $valid | Sort-Object -Unique
         }
 
-        Write-Warning "No valid package numbers selected. Please try again."
+        Write-Warning "No valid numbers selected."
     }
 }
 
@@ -90,4 +129,4 @@ foreach ($index in $selection) {
     Install-Package -PackageId $pkg.Id -DisplayName $pkg.Name
 }
 
-Write-Host "Installation process complete!"
+Write-Host "`nInstallation process complete!" -ForegroundColor Green
