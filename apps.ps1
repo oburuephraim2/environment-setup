@@ -50,10 +50,12 @@ function Install-Package {
             # Wait Indefinitely: This fixes the 5-minute timeout issue for large apps like Adobe
             $process.WaitForExit()
             
-            if ($process.ExitCode -eq 0) {
+            # Check if installed after attempt
+            $checkAfter = winget list --id "$PackageId" --exact --source winget 2>$null
+            if ($checkAfter -match $PackageId) {
                 Write-Host "SUCCESS: $DisplayName installed." -ForegroundColor Green
             } else {
-                Write-Warning "FAILED: $DisplayName returned exit code $($process.ExitCode)."
+                Write-Warning "FAILED: $DisplayName could not be installed."
             }
         }
         catch {
@@ -72,7 +74,8 @@ $packages = @(
     @{ Id = "OpenJS.NodeJS.LTS"; Name = "Node.js LTS" },
     @{ Id = "Git.Git"; Name = "Git" },
     @{ Id = "GitHub.GitHubDesktop"; Name = "GitHub Desktop" },
-    @{ Id = "Cloudflare.cloudflared"; Name = "Cloudflared" }
+    @{ Id = "Cloudflare.cloudflared"; Name = "Cloudflared" },
+    @{ Id = "Mozilla.Firefox"; Name = "Mozilla Firefox" }
 )
 
 # Show menu
