@@ -44,24 +44,50 @@ for ($i = 0; $i -lt $packages.Count; $i++) {
 }
 Write-Host "A. Install ALL packages"
 
-# Read user input
-$userChoice = Read-Host "Enter your choices (e.g. 1,3,5 or A for all)"
+function Get-PackageSelection {
+    while ($true) {
+        $userChoice = Read-Host "Enter your choices (e.g. 1,3,5 or A for all)"
 
-if ($userChoice -eq "A" -or $userChoice -eq "a") {
-    Write-Host "Installing all packages..."
-    foreach ($pkg in $packages) {
-        Install-Package -PackageId $pkg.Id -DisplayName $pkg.Name
-    }
-} else {
-    $choices = $userChoice -split "," | ForEach-Object { $_.Trim() }
-    foreach ($choice in $choices) {
-        if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $packages.Count) {
-            $pkg = $packages[[int]$choice - 1]
-            Install-Package -PackageId $pkg.Id -DisplayName $pkg.Name
-        } else {
-            Write-Warning "Invalid choice: $choice"
+        if ([string]::IsNullOrWhiteSpace($userChoice)) {
+            Write-Warning "No selection entered. Please choose one or more package numbers, or 'A' to install all."
+            continue
         }
+
+        if ($userChoice -ieq 'A') {
+            return 1..$packages.Count
+        }
+
+        $choices = $userChoice -split '[,\s]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+
+        $valid = @()
+        $invalid = @()
+
+        foreach ($ch in $choices) {
+            if ($ch -match '^\d+$' -and [int]$ch -ge 1 -and [int]$ch -le $packages.Count) {
+                $valid += [int]$ch
+            } else {
+                $invalid += $ch
+            }
+        }
+
+        if ($invalid.Count -gt 0) {
+            Write-Warning "Invalid choice(s): $($invalid -join ', '). Please enter only numbers between 1 and $($packages.Count), or 'A'."
+            continue
+        }
+
+        if ($valid.Count -gt 0) {
+            return $valid | Sort-Object -Unique
+        }
+
+        Write-Warning "No valid package numbers selected. Please try again."
     }
+}
+
+$selection = Get-PackageSelection
+
+foreach ($index in $selection) {
+    $pkg = $packages[$index - 1]
+    Install-Package -PackageId $pkg.Id -DisplayName $pkg.Name
 }
 
 Write-Host "Installation process complete!"
